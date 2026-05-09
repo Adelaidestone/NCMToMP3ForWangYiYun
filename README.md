@@ -85,4 +85,4 @@ src-tauri/capabilities/    Tauri 权限配置
 
 ## 许可证
 
-MIT
+MIT License © Mussy
