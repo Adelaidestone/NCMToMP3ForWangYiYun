@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Frontend build output
+dist/
+
+# Tauri/Rust build output
+target/
+src-tauri/target/
+
+# Tauri generated editor schemas
+src-tauri/gen/schemas/
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+
+# Local app settings and generated media
+.ncm-converter-settings.json
+*.mp3
+*.flac
+*.wav
