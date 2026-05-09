@@ -1,6 +1,8 @@
-# NCM Converter
+# NCMToMP3ForWangYiYun
 
-NCM Converter is a desktop app for converting local `.ncm` files into playable audio files. It is built with Svelte, Vite, Tauri 2, and Rust.
+一个把网易云音乐本地下载的本地 `.ncm` 文件解析为 MP3 文件的桌面工具，支持 ID3 标签提取，全程本地运行，快速解析。
+
+The app is built with Svelte, Vite, Tauri 2, and Rust.
 
 ## Features
 
@@ -39,10 +41,10 @@ src-tauri/target/release/bundle/
 ## Project Structure
 
 ```text
-src/                 Svelte frontend
-src/components/      UI components
-src-tauri/src/       Rust conversion and Tauri commands
-src-tauri/icons/     Application icons
+src/                    Svelte frontend
+src/components/         UI components
+src-tauri/src/          Rust conversion and Tauri commands
+src-tauri/icons/        Application icons
 src-tauri/capabilities/ Tauri permissions
 ```
 
