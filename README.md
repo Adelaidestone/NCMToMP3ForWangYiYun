@@ -83,6 +83,10 @@ src-tauri/capabilities/    Tauri 权限配置
 
 本项目仅用于处理你有权处理的本地文件。请勿使用本项目重新分发受版权保护的音乐，也请遵守相关服务条款。本项目与网易云音乐没有关联。
 
+## 鸣谢
+
+感谢 [linux.do 社区](https://linux.do/)。
+
 ## 许可证
 
 MIT License © Mussy
