@@ -1,5 +1,5 @@
-# Security Policy
+# 安全策略
 
-If you find a security issue, please avoid publishing exploit details before maintainers have had time to investigate.
+如果你发现安全问题，请避免在维护者调查前公开漏洞细节。
 
-For now, open a private report through GitHub Security Advisories if the repository has it enabled. Otherwise, create an issue with a high-level description and omit sensitive reproduction details until a maintainer responds.
+如果仓库启用了 GitHub Security Advisories，请优先通过私密安全报告提交。否则，请创建 issue 并只描述高层问题，不要在维护者回复前公开敏感复现细节。
