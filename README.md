@@ -65,11 +65,18 @@ src-tauri/target/release/bundle/
 ## 项目结构
 
 ```text
-src/                    Svelte 前端源码
-src/components/         UI 组件
-src-tauri/src/          Rust 转换逻辑和 Tauri 命令
-src-tauri/icons/        应用图标
-src-tauri/capabilities/ Tauri 权限配置
+src/                       Svelte 前端入口
+src/app/                   前端文件队列、转换调用和设置工具
+src/components/            UI 组件
+src-tauri/src/commands.rs  Tauri 命令入口
+src-tauri/src/conversion.rs 转换流程编排
+src-tauri/src/id3_tags.rs  MP3 ID3 标签写入
+src-tauri/src/lyrics.rs    同名歌词文件读取
+src-tauri/src/ncm.rs       NCM 解密和元数据解析
+src-tauri/src/scanner.rs   NCM 文件扫描
+src-tauri/src/settings.rs  设置文件读写
+src-tauri/icons/           应用图标
+src-tauri/capabilities/    Tauri 权限配置
 ```
 
 ## 说明

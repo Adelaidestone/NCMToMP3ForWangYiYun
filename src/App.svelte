@@ -1,31 +1,41 @@
 <script>
-  import { invoke } from '@tauri-apps/api/core'
-  import { listen } from '@tauri-apps/api/event'
-  import { open } from '@tauri-apps/plugin-dialog'
   import { onMount } from 'svelte'
+  import {
+    addUniqueQueuedFiles,
+    clearFinishedFiles,
+    pendingFilePaths,
+    resetFilesForProcessing,
+    updateFileProgress
+  } from './app/fileQueue'
+  import {
+    convertFiles,
+    loadSettings,
+    saveSettings as persistSettings,
+    scanPendingNcmFiles,
+    selectDirectory,
+    selectNcmFiles,
+    selectNcmFolder,
+    subscribeFileProgress
+  } from './app/conversion'
+  import {
+    createEmptySettings,
+    loadSettingsOutputPointer,
+    saveSettingsOutputPointer,
+    validateSettings
+  } from './app/settings'
+  import AppHeader from './components/AppHeader.svelte'
   import DropZone from './components/DropZone.svelte'
   import FileList from './components/FileList.svelte'
   import SettingsModal from './components/SettingsModal.svelte'
-  import logoIcon from '../src-tauri/icons/icon_32x32.png'
-  import { Settings, FolderOpen } from 'lucide-svelte'
-
-  const settingsPointerKey = 'ncm-converter-output-dir'
+  import { FolderOpen } from 'lucide-svelte'
   
   let files = $state([])
   let outputDir = $state('')
   let isProcessing = $state(false)
   let isSettingsOpen = $state(false)
   let settingsError = $state('')
-  let settings = $state({
-    inputDir: '',
-    outputDir: '',
-    autoConvertOnStart: false
-  })
-  let draftSettings = $state({
-    inputDir: '',
-    outputDir: '',
-    autoConvertOnStart: false
-  })
+  let settings = $state(createEmptySettings())
+  let draftSettings = $state(createEmptySettings())
   let stats = $derived({
     total: files.length,
     success: files.filter(f => f.status === 'success').length,
@@ -36,71 +46,27 @@
   let eventUnlisten = $state(null)
 
   onMount(async () => {
-    eventUnlisten = await listen('file-progress', (event) => {
-      const { path, status, progress, error } = event.payload
-      const index = files.findIndex(f => f.path === path)
-      if (index !== -1) {
-        files[index] = {
-          ...files[index],
-          status,
-          progress: progress || 0,
-          error: error || null
-        }
-      }
+    eventUnlisten = await subscribeFileProgress(payload => {
+      files = updateFileProgress(files, payload)
     })
 
     await loadSettingsFromPointer()
   })
 
   function addFiles(newFiles) {
-    for (const file of newFiles) {
-      const exists = files.some(f => f.path === file.path)
-      if (!exists) {
-        files.push({
-          ...file,
-          status: 'pending',
-          progress: 0,
-          error: null
-        })
-      }
-    }
+    files = addUniqueQueuedFiles(files, newFiles)
   }
 
   async function selectFiles() {
-    const selected = await open({
-      multiple: true,
-      filters: [{
-        name: 'NCM Files',
-        extensions: ['ncm']
-      }]
-    })
-    
-    if (selected) {
-      const fileList = Array.isArray(selected) ? selected : [selected]
-      const newFiles = fileList.map(path => ({
-        path,
-        name: path.split(/[/\\]/).pop()
-      }))
-      addFiles(newFiles)
-    }
+    addFiles(await selectNcmFiles())
   }
 
   async function selectFolder() {
-    const selected = await open({
-      directory: true
-    })
-    
-    if (selected) {
-      const ncmFiles = await invoke('scan_ncm_files', { path: selected })
-      addFiles(ncmFiles)
-    }
+    addFiles(await selectNcmFolder())
   }
 
   async function selectOutputDir() {
-    const selected = await open({
-      directory: true
-    })
-    
+    const selected = await selectDirectory()
     if (selected) {
       outputDir = selected
     }
@@ -110,20 +76,10 @@
     if (paths.length === 0 || isProcessing) return
     
     isProcessing = true
-
-    files.forEach(f => {
-      if (paths.includes(f.path) && f.status !== 'success') {
-        f.status = 'pending'
-        f.progress = 0
-        f.error = null
-      }
-    })
+    files = resetFilesForProcessing(files, paths)
     
     try {
-      await invoke('convert_files', {
-        files: paths,
-        outputDir: targetOutputDir || null
-      })
+      await convertFiles(paths, targetOutputDir)
     } catch (error) {
       console.error('Processing error:', error)
     } finally {
@@ -132,15 +88,11 @@
   }
 
   async function startProcessing() {
-    const pendingPaths = files
-      .filter(f => f.status !== 'success')
-      .map(f => f.path)
-
-    await convertFilePaths(pendingPaths, outputDir || settings.outputDir || null)
+    await convertFilePaths(pendingFilePaths(files), outputDir || settings.outputDir || null)
   }
 
   function clearCompleted() {
-    files = files.filter(f => f.status !== 'success' && f.status !== 'error')
+    files = clearFinishedFiles(files)
   }
 
   function removeFile(path) {
@@ -154,7 +106,7 @@
   }
 
   async function selectSettingsInputDir() {
-    const selected = await open({ directory: true })
+    const selected = await selectDirectory()
     if (selected) {
       draftSettings.inputDir = selected
       if (!draftSettings.outputDir) {
@@ -164,7 +116,7 @@
   }
 
   async function selectSettingsOutputDir() {
-    const selected = await open({ directory: true })
+    const selected = await selectDirectory()
     if (selected) {
       draftSettings.outputDir = selected
       if (!draftSettings.inputDir) {
@@ -175,20 +127,14 @@
 
   async function saveSettings() {
     settingsError = ''
-
-    if (!draftSettings.outputDir) {
-      settingsError = '请先选择默认输出文件夹。'
-      return
-    }
-
-    if (draftSettings.autoConvertOnStart && !draftSettings.inputDir) {
-      settingsError = '开启启动自动转换前，请先选择默认输入文件夹。'
+    settingsError = validateSettings(draftSettings)
+    if (settingsError) {
       return
     }
 
     try {
-      await invoke('save_settings', { settings: draftSettings })
-      localStorage.setItem(settingsPointerKey, draftSettings.outputDir)
+      await persistSettings(draftSettings)
+      saveSettingsOutputPointer(draftSettings.outputDir)
       settings = { ...draftSettings }
       outputDir = settings.outputDir
       isSettingsOpen = false
@@ -198,11 +144,11 @@
   }
 
   async function loadSettingsFromPointer() {
-    const savedOutputDir = localStorage.getItem(settingsPointerKey)
+    const savedOutputDir = loadSettingsOutputPointer()
     if (!savedOutputDir) return
 
     try {
-      const loadedSettings = await invoke('load_settings', { outputDir: savedOutputDir })
+      const loadedSettings = await loadSettings(savedOutputDir)
       if (!loadedSettings) return
 
       settings = loadedSettings
@@ -220,10 +166,10 @@
     if (isProcessing) return
 
     try {
-      const pendingFiles = await invoke('scan_pending_ncm_files', {
-        inputDir: activeSettings.inputDir,
-        outputDir: activeSettings.outputDir
-      })
+      const pendingFiles = await scanPendingNcmFiles(
+        activeSettings.inputDir,
+        activeSettings.outputDir
+      )
 
       if (pendingFiles.length === 0) return
 
@@ -239,33 +185,11 @@
 </script>
 
 <div class="app-container">
-  <header class="app-header">
-    <div class="header-content">
-      <div class="logo">
-        <img class="logo-icon" src={logoIcon} alt="" aria-hidden="true" />
-        <div class="logo-text">
-          <h1>NCM Converter</h1>
-          <span class="subtitle">网易云音乐格式转换</span>
-        </div>
-      </div>
-      
-      <div class="header-actions">
-        <button class="icon-button" onclick={selectOutputDir} title="选择输出目录">
-          <FolderOpen size={20} />
-        </button>
-        <button class="icon-button" title="设置" onclick={openSettings}>
-          <Settings size={20} />
-        </button>
-      </div>
-    </div>
-    
-    {#if outputDir}
-      <div class="output-path">
-        <span class="output-label">输出目录:</span>
-        <span class="output-value">{outputDir}</span>
-      </div>
-    {/if}
-  </header>
+  <AppHeader
+    {outputDir}
+    onselectoutput={selectOutputDir}
+    onopensettings={openSettings}
+  />
 
   <main class="app-main">
     {#if files.length === 0}
@@ -373,94 +297,6 @@
                 radial-gradient(ellipse at 70% 80%, rgba(255, 119, 198, 0.1) 0%, transparent 50%);
     pointer-events: none;
     z-index: 0;
-  }
-
-  .app-header {
-    position: relative;
-    z-index: 1;
-    padding: 20px 32px;
-    background: rgba(255, 255, 255, 0.03);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(20px);
-  }
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-
-  .logo-icon {
-    width: 28px;
-    height: 28px;
-    display: block;
-    object-fit: contain;
-    filter: drop-shadow(0 0 14px rgba(59, 130, 246, 0.35));
-  }
-
-  .logo-text h1 {
-    font-size: 22px;
-    font-weight: 600;
-    background: linear-gradient(135deg, #fff 0%, #a78bfa 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .subtitle {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
-    font-weight: 400;
-  }
-
-  .header-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .icon-button {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    color: rgba(255, 255, 255, 0.7);
-    cursor: pointer;
-    transition: all 0.3s ease;
-  }
-
-  .icon-button:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: #fff;
-    transform: translateY(-2px);
-  }
-
-  .output-path {
-    margin-top: 12px;
-    padding: 10px 16px;
-    background: rgba(124, 58, 237, 0.1);
-    border: 1px solid rgba(124, 58, 237, 0.2);
-    border-radius: 10px;
-    font-size: 13px;
-  }
-
-  .output-label {
-    color: rgba(255, 255, 255, 0.5);
-    margin-right: 8px;
-  }
-
-  .output-value {
-    color: #a78bfa;
-    font-family: 'SF Mono', 'Fira Code', monospace;
   }
 
   .app-main {
