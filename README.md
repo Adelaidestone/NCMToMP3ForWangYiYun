@@ -4,6 +4,10 @@
 
 本项目使用 Svelte、Vite、Tauri 2 和 Rust 构建。
 
+## 直接使用
+
+不需要本地编译的用户，可以在 GitHub Releases 中获取 Windows 安装包。
+
 ## 功能
 
 - 支持转换单个 `.ncm` 文件或整个文件夹。
